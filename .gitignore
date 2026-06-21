@@ -100,3 +100,9 @@ storybook-static/
 .playwright-mcp/
 pr-assets/
 backlog
+
+# Internal docs (kept local, not in shared repo)
+docs/
+
+# Pipeline service test snapshots (kept local)
+packages/services/src/pipelinesService/__snapshots__/
