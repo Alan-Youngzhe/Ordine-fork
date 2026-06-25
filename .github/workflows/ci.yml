@@ -29,9 +29,11 @@ jobs:
       - name: i18n dead-key & parity check
         run: cd apps/app && bun run check:i18n
 
-      - name: Architecture boundaries & file-size guards
+      # H3-03~06：边界 / 文件行数 / schema-exports / no-throw(ratchet) / barrel export-star 门禁。
+      - name: Engineering governance gates
         run: bun run check:arch
 
+      # H3-07：vitest.config 的 coverage.enabled=true 让本步即按 per-package ratchet 地板强制覆盖率。
       - name: Test
         run: bun run test
 

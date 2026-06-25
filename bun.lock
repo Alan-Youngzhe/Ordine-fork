@@ -12,6 +12,7 @@
         "@oxlint/binding-darwin-x64": "^1.62.0",
         "@rollup/rollup-darwin-arm64": "^4.60.1",
         "@rollup/rollup-darwin-x64": "^4.60.2",
+        "@vitest/coverage-v8": "^4.1.6",
         "knip": "^6.4.0",
         "oxfmt": "0.44.0",
         "oxlint": "^1.59.0",
