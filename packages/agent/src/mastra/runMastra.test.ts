@@ -31,7 +31,9 @@ describe("runMastra with Kimi", () => {
     expect(result.text.length).toBeGreaterThan(0);
   });
 
-  it("falls back to string model when apiKey is missing", async () => {
+  // 缺 key 时默认 Kimi 模型应 fast-fail 并给出清晰提示（RUN-06）。断言真实消息而非环境依赖串；
+  // 本机若恰好配了 KIMI_API_KEY 则无法触发缺 key 路径，跳过（与上面两测的 skipIf 同理）。
+  it.skipIf(apiKey)("throws a clear error when KIMI_API_KEY is missing", async () => {
     await expect(
       runMastra({
         systemPrompt: "sys",
@@ -39,6 +41,6 @@ describe("runMastra with Kimi", () => {
         cwd: process.cwd(),
         timeoutMs: 1000,
       }),
-    ).rejects.toThrow(/Failed to resolve model configuration/);
+    ).rejects.toThrow(/KIMI_API_KEY 未配置/);
   });
 });
