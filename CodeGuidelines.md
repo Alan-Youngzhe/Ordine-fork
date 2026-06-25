@@ -437,7 +437,11 @@ useEffect(() => {
 
 ## 十二、测试规范
 
-- 最低覆盖率：**80%**
+- 覆盖率目标 **80%**，当前以 **ratchet 地板**强制（H3-07）：`vitest.coverage.base.ts` 提供共享
+  `coverageConfig()`，各包 `coverage.enabled=true` + per-package 实测地板（如 apps/app `L62/B51`、
+  services `L83/B64`、schemas `L98`），`bun run test` 即按地板强制——低于地板 CI 失败。地板**只增不减**：
+  补齐测试缺口后上调对应包 floors，逐步逼近 80%；新代码不得把覆盖率拉到地板以下。
+  （agent/server/cli/create 因测试缺失或预存在问题暂未接入，是待补的覆盖率缺口。）
 - 工作流：先写失败测试（Red）→ 最小实现（Green）→ 重构（Improve）
 - 单元测试：Vitest，与源码同目录或在 `tests/` 子目录
 - E2E：Playwright，在 `e2e/` 目录
