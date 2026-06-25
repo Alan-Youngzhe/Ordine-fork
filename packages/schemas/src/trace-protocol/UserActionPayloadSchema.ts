@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v4";
 
 /**
  * `@@USER_ACTION::` 标记的 JSON 负载结构（H1-01）。

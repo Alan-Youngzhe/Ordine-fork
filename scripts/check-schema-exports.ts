@@ -13,11 +13,30 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, basename, relative } from "node:path";
+import { walkDirs } from "./lib/walkSources.ts";
 
 const ROOT = join(import.meta.dirname ?? new URL(".", import.meta.url).pathname, "..");
 
-const IGNORE_DIRS = new Set(["node_modules", ".agents", "dist", ".turbo", ".git"]);
+const IGNORE_DIRS = new Set([
+  "node_modules",
+  ".agents",
+  "dist",
+  ".turbo",
+  ".git",
+  ".worktrees",
+  "archived",
+]);
 const SCHEMA_EXPORT_RE = /export\s+const\s+(\w+Schema)\s*=/g;
+
+/**
+ * 既有"一文件多 schema"债务，只减不增（H3-06）。这些文件把小型伴生 schema 与主
+ * schema 同文件共置；拆到独立文件后从此删除对应行。仅豁免 extra-export，仍要求主
+ * schema 名与文件名一致。
+ */
+const MULTI_SCHEMA_ALLOWLIST = new Set<string>([
+  "packages/agent/src/claude/schemas/RunClaudeOptionsSchema.ts",
+  "packages/pipeline-engine/src/schemas/NodeCtxSchema.ts",
+]);
 
 interface Violation {
   file: string;
@@ -29,22 +48,12 @@ const violations: Violation[] = [];
 let checkedCount = 0;
 let dirCount = 0;
 
-function findSchemaDirs(dir: string): string[] {
-  const results: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (IGNORE_DIRS.has(entry.name)) continue;
-    const full = join(dir, entry.name);
-    if (!entry.isDirectory()) continue;
-
-    if (entry.name === "schemas") {
-      results.push(full);
-    }
-    results.push(...findSchemaDirs(full));
-  }
-  return results;
-}
-
-const schemaDirs = findSchemaDirs(ROOT);
+// 只认"源码 schemas/ 子目录"，排除 @repo/schemas 包根（packages/schemas，其下 vitest.config.ts
+// 等配置文件不是 schema 源文件）；该包的真实 schema 树由下方 packagesSchemaSrc 单独覆盖。
+const PACKAGE_ROOT_SCHEMAS = join(ROOT, "packages/schemas");
+const schemaDirs = walkDirs(ROOT, IGNORE_DIRS).filter(
+  (dir) => basename(dir) === "schemas" && dir !== PACKAGE_ROOT_SCHEMAS,
+);
 
 const allSchemaFiles = new Set<string>();
 const nonSchemaFiles: string[] = [];
@@ -116,7 +125,7 @@ for (const filePath of sortedFiles) {
   }
 
   const extras = schemaExports.filter((name) => name !== fileName);
-  if (extras.length > 0) {
+  if (extras.length > 0 && !MULTI_SCHEMA_ALLOWLIST.has(relPath)) {
     violations.push({
       file: relPath,
       reason: "extra schema exports in file",
