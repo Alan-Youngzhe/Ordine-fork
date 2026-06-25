@@ -1,21 +1,25 @@
 // Test fixture: a minimal fake MCP server over stdio (newline-delimited JSON-RPC).
 // Responds to `initialize` and `tools/list`; ignores notifications. Used by mcpStdioClient.unit.test.ts.
-let buffer = "";
+import { Result } from "neverthrow";
+
+// neverthrow 包裹 JSON.parse：非 JSON 行走 isErr 分支跳过，无裸 try/catch（同 mcpStdioClient）。
+const safeJsonParse = Result.fromThrowable(
+  (line) => JSON.parse(line),
+  () => "non-JSON line",
+);
+
+const state = { buffer: "" };
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => {
-  buffer += chunk;
-  let nl = buffer.indexOf("\n");
-  while (nl !== -1) {
-    const line = buffer.slice(0, nl).trim();
-    buffer = buffer.slice(nl + 1);
-    nl = buffer.indexOf("\n");
+  state.buffer += chunk;
+  const lines = state.buffer.split("\n");
+  state.buffer = lines.pop() ?? "";
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
     if (!line) continue;
-    let msg;
-    try {
-      msg = JSON.parse(line);
-    } catch {
-      continue;
-    }
+    const parsed = safeJsonParse(line);
+    if (parsed.isErr()) continue;
+    const msg = parsed.value;
     if (msg.method === "initialize") {
       process.stdout.write(
         `${JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "2024-11-05", capabilities: {}, serverInfo: { name: "fake", version: "1.0.0" } } })}\n`,

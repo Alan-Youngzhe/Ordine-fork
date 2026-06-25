@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { logger } from "@repo/logger";
-import { err, ok, type Result } from "neverthrow";
+import { err, ok, Result } from "neverthrow";
 
 /**
  * 与 `@repo/schemas` 的 McpToolSummary 结构一致，但本包不依赖 schemas——
@@ -23,6 +23,12 @@ type JsonRpcMessage = {
   result?: { tools?: { name?: unknown; description?: unknown }[] };
   error?: { message?: string };
 };
+
+// neverthrow 包裹 JSON.parse：非 JSON 行（部分 server 往 stdout 打日志）走 isErr 分支跳过，无裸 try/catch。
+const safeJsonParse = Result.fromThrowable(
+  (line: string) => JSON.parse(line) as JsonRpcMessage,
+  () => "non-JSON line",
+);
 
 const encodeLine = (msg: unknown): string => `${JSON.stringify(msg)}\n`;
 
@@ -51,15 +57,15 @@ export const listMcpToolsStdio = (
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   return new Promise((resolve) => {
-    let settled = false;
+    const state = { settled: false };
     const child = spawn(opts.command, opts.args ?? [], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, ...(opts.env ?? {}) },
+      env: { ...process.env, ...opts.env },
     });
 
     const finish = (result: Result<McpToolSummary[], string>) => {
-      if (settled) return;
-      settled = true;
+      if (state.settled) return;
+      state.settled = true;
       clearTimeout(timer);
       child.kill("SIGKILL");
       resolve(result);
@@ -72,35 +78,31 @@ export const listMcpToolsStdio = (
 
     child.on("error", (error) => finish(err(`spawn failed: ${error.message}`)));
     child.on("exit", (code) => {
-      if (!settled) finish(err(`MCP server exited (code=${code ?? "null"}) before tools/list`));
+      if (!state.settled)
+        finish(err(`MCP server exited (code=${code ?? "null"}) before tools/list`));
     });
 
-    let buffer = "";
-    let initialized = false;
+    const stream = { buffer: "", initialized: false };
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
-      buffer += chunk;
-      let nl = buffer.indexOf("\n");
-      while (nl !== -1) {
-        const line = buffer.slice(0, nl).trim();
-        buffer = buffer.slice(nl + 1);
-        nl = buffer.indexOf("\n");
+      stream.buffer += chunk;
+      const lines = stream.buffer.split("\n");
+      stream.buffer = lines.pop() ?? "";
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
         if (!line) continue;
 
-        let msg: JsonRpcMessage;
-        try {
-          msg = JSON.parse(line) as JsonRpcMessage;
-        } catch {
-          continue; // 忽略非 JSON 行（部分 server 会往 stdout 打日志）
-        }
+        const parsed = safeJsonParse(line);
+        if (parsed.isErr()) continue; // 忽略非 JSON 行（部分 server 会往 stdout 打日志）
+        const msg = parsed.value;
 
-        if (msg.id === 1 && !initialized) {
+        if (msg.id === 1 && !stream.initialized) {
           if (msg.error) {
             finish(err(`initialize error: ${msg.error.message ?? "unknown"}`));
 
             return;
           }
-          initialized = true;
+          stream.initialized = true;
           child.stdin.write(encodeLine({ jsonrpc: "2.0", method: "notifications/initialized" }));
           child.stdin.write(
             encodeLine({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
