@@ -16,8 +16,9 @@
  * Usage: node --experimental-strip-types scripts/check-i18n-dead-keys.ts （或 tsx）
  */
 
-import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { walkSources } from "./lib/walkSources.ts";
 
 const ROOT = join(import.meta.dirname ?? new URL(".", import.meta.url).pathname, "..");
 const SRC = join(ROOT, "apps/app/src");
@@ -37,17 +38,6 @@ const flattenKeys = (obj: Record<string, unknown>, prefix = ""): string[] =>
       : [path];
   });
 
-const collectSources = (dir: string, out: string[]): void => {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      if (!IGNORE_DIRS.has(entry)) collectSources(full, out);
-    } else if (/\.(ts|tsx)$/.test(entry) && !IGNORE_FILE_RE.test(entry)) {
-      out.push(full);
-    }
-  }
-};
-
 const enKeys = flattenKeys(JSON.parse(readFileSync(join(LOCALES, "en.json"), "utf8")));
 const zhKeys = flattenKeys(JSON.parse(readFileSync(join(LOCALES, "zh.json"), "utf8")));
 
@@ -56,8 +46,7 @@ const zhSet = new Set(zhKeys);
 const missingInZh = enKeys.filter((key) => !zhSet.has(key));
 const missingInEn = zhKeys.filter((key) => !enSet.has(key));
 
-const files: string[] = [];
-collectSources(SRC, files);
+const files = walkSources(SRC, { ignoreDirs: IGNORE_DIRS, ignoreFileRe: IGNORE_FILE_RE });
 
 const usedExact = new Set<string>();
 const usedPrefixes = new Set<string>();

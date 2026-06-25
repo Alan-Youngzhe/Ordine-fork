@@ -11,8 +11,9 @@
  * Usage: node --experimental-strip-types scripts/check-boundaries.ts
  */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { walkSources } from "./lib/walkSources.ts";
 
 const ROOT = join(import.meta.dirname ?? new URL(".", import.meta.url).pathname, "..");
 const IGNORE_DIRS = new Set(["node_modules", "archived", "dist", ".turbo", "storybook-static"]);
@@ -58,17 +59,6 @@ const RULES: Rule[] = [
   },
 ];
 
-const collect = (dir: string, out: string[]): void => {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      if (!IGNORE_DIRS.has(entry)) collect(full, out);
-      continue;
-    }
-    if (/\.(ts|tsx)$/.test(entry) && !IGNORE_FILE_RE.test(entry)) out.push(full);
-  }
-};
-
 const importsOf = (file: string): string[] => {
   const text = readFileSync(file, "utf8");
   const specs: string[] = [];
@@ -83,8 +73,7 @@ const importsOf = (file: string): string[] => {
 const violations: string[] = [];
 for (const rule of RULES) {
   const base = join(ROOT, rule.dir);
-  const files: string[] = [];
-  collect(base, files);
+  const files = walkSources(base, { ignoreDirs: IGNORE_DIRS, ignoreFileRe: IGNORE_FILE_RE });
   for (const file of files) {
     for (const spec of importsOf(file)) {
       if (rule.forbid(spec, file)) {

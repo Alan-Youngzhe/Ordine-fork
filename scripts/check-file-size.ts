@@ -11,8 +11,9 @@
  * Usage: node --experimental-strip-types scripts/check-file-size.ts
  */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { walkSources } from "./lib/walkSources.ts";
 
 const ROOT = join(import.meta.dirname ?? new URL(".", import.meta.url).pathname, "..");
 const SCAN_DIRS = ["apps", "packages"];
@@ -37,20 +38,10 @@ const DEBT_ALLOWLIST = new Set<string>([
   "apps/app/src/pages/WorkspacePage/canvas/_store/graphSlice.ts",
 ]);
 
-const files: string[] = [];
-const walk = (dir: string): void => {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      if (!IGNORE_DIRS.has(entry)) walk(full);
-      continue;
-    }
-    if (!/\.(ts|tsx)$/.test(entry) || IGNORE_FILE_RE.test(entry)) continue;
-    files.push(full);
-  }
-};
-
-for (const dir of SCAN_DIRS) walk(join(ROOT, dir));
+const files = walkSources(
+  SCAN_DIRS.map((dir) => join(ROOT, dir)),
+  { ignoreDirs: IGNORE_DIRS, ignoreFileRe: IGNORE_FILE_RE },
+);
 
 const warnings: string[] = [];
 const failures: string[] = [];
